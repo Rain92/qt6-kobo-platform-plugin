@@ -35,10 +35,10 @@ public:
     QPlatformInputContext *inputContext() const override { return m_inputContext; }
 
     QPlatformNativeInterface *nativeInterface() const override;
+    QFunctionPointer platformFunction(const QByteArray &function) const override;
 
     QList<QPlatformScreen *> screens() const;
 
-    QFunctionPointer platformFunction(const QByteArray &function) const override;
 
     KoboDeviceDescriptor *deviceDescriptor();
 

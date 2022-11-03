@@ -12,11 +12,16 @@ QMAKE_CXXFLAGS += -Wno-missing-field-initializers
 
 QMAKE_RPATHDIR += ../../lib
 
-QT +=  widgets \
-    core-private gui-private \
-    service_support-private eventdispatcher_support-private input_support-private \
-    fb_support-private fontdatabase_support-private
+QT += widgets \
+      core-private gui-private \
+      input_support-private \
+      fb_support-private
 
+lessThan(QT_MAJOR_VERSION, 6) {
+    QT += eventdispatcher_support-private \
+          service_support-private \
+          fontdatabase_support-private
+}
 
 INCLUDEPATH += $$PWD/src
 

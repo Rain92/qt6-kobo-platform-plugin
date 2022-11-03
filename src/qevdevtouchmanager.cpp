@@ -72,14 +72,14 @@ QEvdevTouchManager::QEvdevTouchManager(const QString &key, const QString &specif
 
     m_spec = spec;
 
-    auto args = spec.splitRef(QLatin1Char(':'));
+    auto args = spec.split(QLatin1Char(':'));
 
-    for (const QStringRef &arg : qAsConst(args))
+    for (const auto &arg : qAsConst(args))
     {
         if (arg.startsWith(QLatin1String("/dev/")))
         {
             // if device is specified try to use it
-            devicePaths.append(arg.toString());
+            devicePaths.append(arg);
         }
         else
         {

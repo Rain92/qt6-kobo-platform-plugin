@@ -1,14 +1,21 @@
 
 #include "koboplatformintegration.h"
 
-#include <QtEventDispatcherSupport/private/qgenericunixeventdispatcher_p.h>
 #include <QtFbSupport/private/qfbbackingstore_p.h>
 #include <QtFbSupport/private/qfbwindow_p.h>
-#include <QtFontDatabaseSupport/private/qgenericunixfontdatabase_p.h>
 #include <QtGui/private/qguiapplication_p.h>
-#include <QtServiceSupport/private/qgenericunixservices_p.h>
 #include <qevdevtouchmanager_p.h>
 #include <qpa/qplatforminputcontextfactory_p.h>
+
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#include <QtEventDispatcherSupport/private/qgenericunixeventdispatcher_p.h>
+#include <QtFontDatabaseSupport/private/qgenericunixfontdatabase_p.h>
+#include <QtServiceSupport/private/qgenericunixservices_p.h>
+#else
+#include <QtGui/private/qgenericunixfontdatabase_p.h>
+#include <QtGui/private/qgenericunixservices_p.h>
+#include <QtGui/private/qgenericunixeventdispatcher_p.h>
+#endif
 
 KoboPlatformIntegration::KoboPlatformIntegration(const QStringList &paramList)
     : m_paramList(paramList),
@@ -71,7 +78,7 @@ QPlatformWindow *KoboPlatformIntegration::createPlatformWindow(QWindow *window) 
 
 QAbstractEventDispatcher *KoboPlatformIntegration::createEventDispatcher() const
 {
-    return createUnixEventDispatcher();
+    return QtGenericUnixDispatcher::createUnixEventDispatcher();
 }
 
 QList<QPlatformScreen *> KoboPlatformIntegration::screens() const
