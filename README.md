@@ -1,8 +1,8 @@
-# qt5-kobo-platform-plugin
-A Qt platform backend plugin for Kobo E-Ink devices, for Qt 5.15 and Qt 6. \
-Supports most of the Kobo platform functons including E-Ink screen refresh control,
+# qt6-kobo-platform-plugin
+A Qt platform backend plugin for Kobo E-Ink devices, for Qt 6 and Qt 5.15. \
+Supports most of the Kobo platform functions including E-Ink screen refresh control,
 input management for buttons and touchscreen, frontlight control, WiFi management and more. \
-At runtime an app using this plugin can be configurend with the environment variable QT_QPA_PLATFORM.
+At runtime an app using this plugin can be configured with the environment variable QT_QPA_PLATFORM.
 
 ```
 export QT_QPA_PLATFORM=kobo:debug:logicaldpitarget=108
@@ -22,6 +22,7 @@ The following parameters are supported:
 | `touchscreen_swap_xy=0\|1`, `touchscreen_invert_x=0\|1`, `touchscreen_invert_y=0\|1` | override the touch panel orientation quirks |
 | `touchscreen_max_range_x=N`, `touchscreen_max_range_y=N` | scale touch coordinates from this panel range instead of treating them as pixels |
 | `nograb` | don't grab the button devices (Nickel will see them too) |
+| `profile` | log the time of every redraw: drawn from a window, composited, dithered or copied, refresh |
 
 ## Device support
 The device, its screen and its touch panel quirks are identified by [FBInk](https://github.com/NiLuJe/FBInk),
@@ -44,6 +45,14 @@ If touch doesn't work right on a device, run with `kobo:debug` and look at the `
 they show the detected protocol, the panel ranges and every raw event.
 The parameters above allow fixing things up without rebuilding.
 
+## Drawing
+The framebuffer is switched to 8 bit grayscale (unless `bpp` says otherwise). With software dithering on
+(`enableDithering`, see `koboplatformfunctions.h`) and the 8 bit framebuffer, every redraw is dithered with an
+ordered 8x8 matrix (NEON on the device) into the 16 gray levels of the panel, else it's copied.
+A changed region that lies within one visible window is drawn straight from that window's backing store,
+which skips Qt's composite into the screen image; overlapping windows go through Qt's composite as usual.
+Then the region is refreshed on the E-Ink screen with the waveform of the refresh mode.
+
 ## Building
 The plugin builds FBInk itself (`make pic` in the FBInk submodule), using the compiler of the Qt kit.
 
@@ -61,4 +70,4 @@ Apps that use `koboplatformfunctions.h` have to be rebuilt when `kobodevicedescr
 since the device descriptor is passed by value.
 
 ## Cross-compile for Kobo
-See https://github.com/Rain92/kobo-qt-setup-script
+See https://github.com/Rain92/kobo-qt-setup-scripts
