@@ -4,17 +4,43 @@
 #include <QtFbSupport/private/qfbbackingstore_p.h>
 #include <QtFbSupport/private/qfbwindow_p.h>
 #include <QtGui/private/qguiapplication_p.h>
-#include <qevdevtouchmanager_p.h>
 #include <qpa/qplatforminputcontextfactory_p.h>
+#include <qpa/qplatformservices.h>
+
+#include "koboinputmanager.h"
+
+// Qt 6 closes a widget's window through QWindow::close(), which destroys the native window but keeps the widget's
+// backing store, and the next show() creates a new native window for it. QFbScreen only attaches the backing
+// stores that were created before their native window (QFbScreen::addWindow()), so a dialog that is opened
+// again after it was closed stays blank, while it is in the window stack and gets the input (an invisible
+// popup). The backing stores are remembered and attached to the new native window.
+namespace
+{
+QHash<const QWindow *, QFbBackingStore *> liveBackingStores;
+
+class KoboBackingStore : public QFbBackingStore
+{
+public:
+    explicit KoboBackingStore(QWindow *window) : QFbBackingStore(window)
+    {
+        liveBackingStores.insert(window, this);
+    }
+
+    ~KoboBackingStore() override
+    {
+        if (liveBackingStores.value(window()) == this)
+            liveBackingStores.remove(window());
+    }
+};
+}  // namespace
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #include <QtEventDispatcherSupport/private/qgenericunixeventdispatcher_p.h>
 #include <QtFontDatabaseSupport/private/qgenericunixfontdatabase_p.h>
 #include <QtServiceSupport/private/qgenericunixservices_p.h>
 #else
-#include <QtGui/private/qgenericunixfontdatabase_p.h>
-#include <QtGui/private/qgenericunixservices_p.h>
 #include <QtGui/private/qgenericunixeventdispatcher_p.h>
+#include <QtGui/private/qgenericunixfontdatabase_p.h>
 #endif
 
 KoboPlatformIntegration::KoboPlatformIntegration(const QStringList &paramList)
@@ -22,20 +48,31 @@ KoboPlatformIntegration::KoboPlatformIntegration(const QStringList &paramList)
       m_primaryScreen(nullptr),
       m_inputContext(nullptr),
       m_fontDb(new QGenericUnixFontDatabase),
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
       m_services(new QGenericUnixServices),
-      m_kbdMgr(nullptr),
-      koboKeyboard(nullptr),
+#else
+      // Like linuxfb: the desktop services would only pull in xdg/dbus code that's useless on a Kobo
+      m_services(new QPlatformServices),
+#endif
+      m_inputManager(nullptr),
       koboAdditions(nullptr),
       debug(false)
 {
-    koboDevice = determineDevice();
+    for (const QString &arg : paramList)
+        if (arg == QLatin1String("debug"))
+            debug = true;
 
-    if (!m_primaryScreen)
-        m_primaryScreen = new KoboFbScreen(paramList, &koboDevice);
+    koboDevice = determineDevice(debug);
+
+    m_primaryScreen = new KoboFbScreen(paramList, &koboDevice);
 }
 
 KoboPlatformIntegration::~KoboPlatformIntegration()
 {
+    // The touch handler threads use the screen, so stop them before the screen goes away
+    delete m_inputManager;
+    m_inputManager = nullptr;
+
     QWindowSystemInterface::handleScreenRemoved(m_primaryScreen);
 }
 
@@ -50,7 +87,8 @@ void KoboPlatformIntegration::initialize()
 
     createInputHandlers();
 
-    qWarning("kobofb: Finished initialization.");
+    if (debug)
+        qDebug("kobofb: Finished initialization.");
 }
 
 bool KoboPlatformIntegration::hasCapability(QPlatformIntegration::Capability cap) const
@@ -68,17 +106,23 @@ bool KoboPlatformIntegration::hasCapability(QPlatformIntegration::Capability cap
 
 QPlatformBackingStore *KoboPlatformIntegration::createPlatformBackingStore(QWindow *window) const
 {
-    return new QFbBackingStore(window);
+    return new KoboBackingStore(window);
 }
 
 QPlatformWindow *KoboPlatformIntegration::createPlatformWindow(QWindow *window) const
 {
-    return new QFbWindow(window);
+    auto fbWindow = new QFbWindow(window);
+
+    // the window is shown again after it was closed, its backing store is still there
+    if (auto backingStore = liveBackingStores.value(window))
+        fbWindow->setBackingStore(backingStore);
+
+    return fbWindow;
 }
 
 QAbstractEventDispatcher *KoboPlatformIntegration::createEventDispatcher() const
 {
-    return QtGenericUnixDispatcher::createUnixEventDispatcher();
+    return createUnixEventDispatcher();
 }
 
 QList<QPlatformScreen *> KoboPlatformIntegration::screens() const
@@ -100,91 +144,8 @@ QPlatformServices *KoboPlatformIntegration::services() const
 
 void KoboPlatformIntegration::createInputHandlers()
 {
-    QString touchscreenDevice(koboDevice.touchDev);
-    QRegularExpression touchDevRx("touchscreen_device=(.*)");
-    QRegularExpression touchSwapXYRx("touchscreen_swap_xy=(.*)");
-    QRegularExpression touchInvXRx("touchscreen_invert_x=(.*)");
-    QRegularExpression touchInvYRx("touchscreen_invert_y=(.*)");
-    QRegularExpression touchRangeXRx("touchscreen_max_range_x=(.*)");
-    QRegularExpression touchRangeYRx("touchscreen_max_range_y=(.*)");
-    QRegularExpression touchRangeFlipRx("touchscreen_flip_axes_limit=(.*)");
+    m_inputManager = new KoboInputManager(m_primaryScreen, &koboDevice, m_paramList, debug);
 
-    bool useHWScreenLimits = true;
-    bool manualRangeFlip = false;
-    int touchRangeX = 0;
-    int touchRangeY = 0;
-    bool experimentaltouchhandler = false;
-
-    auto screenrot = m_primaryScreen->getScreenRotation();
-
-    for (const QString &arg : qAsConst(m_paramList))
-    {
-        if (arg.contains("debug"))
-            debug = true;
-
-        QRegularExpressionMatch match;
-        if (arg.contains(touchDevRx, &match))
-            touchscreenDevice = match.captured(1);
-        if (arg.contains(touchSwapXYRx, &match) && match.captured(1).toInt() > 0)
-        {
-            koboDevice.touchscreenSettings.swapXY = true;
-        }
-        if (arg.contains(touchInvXRx, &match) && match.captured(1).toInt() > 0)
-        {
-            koboDevice.touchscreenSettings.invertX = true;
-        }
-        if (arg.contains(touchInvYRx, &match) && match.captured(1).toInt() > 0)
-        {
-            koboDevice.touchscreenSettings.invertY = true;
-        }
-        if (arg.contains(touchRangeXRx, &match))
-        {
-            touchRangeX = match.captured(1).toInt();
-        }
-        if (arg.contains(touchRangeYRx, &match))
-        {
-            touchRangeY = match.captured(1).toInt();
-        }
-        if (arg.contains(touchRangeFlipRx, &match) && match.captured(1).toInt() > 0)
-        {
-            manualRangeFlip = true;
-        }
-        if(arg.contains("experimentaltouchhandler"))
-        {
-            experimentaltouchhandler = true;
-        }
-    }
-
-    bool flipTouchscreenAxes = koboDevice.touchscreenSettings.swapXY ^ (screenrot & 1);
-    if (manualRangeFlip)
-        flipTouchscreenAxes = !flipTouchscreenAxes;
-    if (useHWScreenLimits && touchRangeX == 0)
-        touchRangeX = flipTouchscreenAxes ? koboDevice.height : koboDevice.width;
-    if (useHWScreenLimits && touchRangeY == 0)
-        touchRangeY = flipTouchscreenAxes ? koboDevice.width : koboDevice.height;
-
-    QString evdevTouchArgs(touchscreenDevice);
-    if (koboDevice.touchscreenSettings.swapXY)
-        evdevTouchArgs += ":swapxy";
-    if (koboDevice.touchscreenSettings.invertX)
-        evdevTouchArgs += ":invertx";
-    if (koboDevice.touchscreenSettings.invertY)
-        evdevTouchArgs += ":inverty";
-    if (touchRangeX > 0)
-        evdevTouchArgs += QString(":hw_range_x_max=%1").arg(touchRangeX);
-    if (touchRangeY > 0)
-        evdevTouchArgs += QString(":hw_range_y_max=%1").arg(touchRangeY);
-    if(experimentaltouchhandler)
-        evdevTouchArgs += ":experimentaltouchhandler";
-
-    evdevTouchArgs += QString(":screenwidth=%1").arg(koboDevice.width);
-    evdevTouchArgs += QString(":screenheight=%1").arg(koboDevice.height);
-
-    evdevTouchArgs += QString(":screenrotation=%1").arg(screenrot * 90);
-
-    new QEvdevTouchManager("EvdevTouch", evdevTouchArgs, this, m_primaryScreen);
-
-    koboKeyboard = new KoboButtonIntegration(this, koboDevice.ntxDev, debug);
     koboAdditions = new KoboPlatformAdditions(this, koboDevice);
 
     if (debug)
@@ -227,7 +188,7 @@ QFunctionPointer KoboPlatformIntegration::platformFunction(const QByteArray &fun
     else if (function == KoboPlatformFunctions::disableWiFiConnectionIdentifier())
         return QFunctionPointer(disableWiFiConnectionStatic);
 
-    return 0;
+    return nullptr;
 }
 
 void KoboPlatformIntegration::setFrontlightLevelStatic(int val, int temp)

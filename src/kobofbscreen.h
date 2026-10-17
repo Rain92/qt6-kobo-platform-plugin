@@ -2,18 +2,13 @@
 #define QKOBOFBSCREEN_H
 
 #include <QtFbSupport/private/qfbscreen_p.h>
-#include <sys/ioctl.h>
-
-#include <cstring>
 
 #include "dither.h"
-#include "eink/mxcfb-kobo.h"
 #include "einkenums.h"
 #include "fbink.h"
 #include "kobodevicedescriptor.h"
 
 class QPainter;
-class QFbCursor;
 
 class KoboFbScreen : public QFbScreen
 {
@@ -23,6 +18,9 @@ public:
     ~KoboFbScreen();
 
     bool initialize() override;
+
+    QDpi logicalDpi() const override;
+    QDpi logicalBaseDpi() const override;
 
     void setFullScreenRefreshMode(WaveForm waveform);
 
@@ -34,8 +32,6 @@ public:
 
     bool setScreenRotation(ScreenRotation r, int bpp = 8);
 
-    void doSunxiPenRefresh();
-
     ScreenRotation getScreenRotation();
 
     FBInkConfig *getFBInkConfig();
@@ -43,19 +39,20 @@ public:
 
     QRegion doRedraw() override;
 
-
 private:
-    void ditherRegion(const QRect &region);
+    void ditherRegionToFramebuffer(const QRect &region);
+    bool canSoftwareDither() const;
+    bool drawFromWindow(const QRect &region, bool dither);
 
     KoboDeviceDescriptor *koboDevice;
 
     QStringList mArgs;
     int mFbFd;
     bool debug;
+    bool profile;
 
     QImage mFbScreenImage;
     int mBytesPerLine;
-    QImage mScreenImageDither;
 
     QPainter *mBlitter;
 
@@ -77,8 +74,11 @@ private:
     WFM_MODE_INDEX_T waveFormPartial;
     WFM_MODE_INDEX_T waveFormFast;
 
-    int originalRotation;
-    int originalBpp;
+    int requestedBpp;
+    int logicalDpiTarget;
+
+    uint32_t originalRotation;
+    uint32_t originalBpp;
 };
 
 #endif  // QKOBOFBSCREEN_H

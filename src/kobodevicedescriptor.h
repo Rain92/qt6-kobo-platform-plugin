@@ -2,7 +2,10 @@
 #define KOBODEVICEDESCRIPTOR_H
 
 #include <QtCore>
-#include <iostream>
+
+// NOTE: Apps include this header and receive the struct by value through
+// KoboPlatformFunctions::getKoboDeviceDescriptor(), so they have to be rebuilt when it changes.
+// New fields and enum values are only ever appended.
 
 enum KoboDevice
 {
@@ -28,7 +31,11 @@ enum KoboDevice
     KoboElipsa,
     KoboSage,
     KoboLibra2,
-    KoboClara2E
+    KoboClara2E,
+    KoboElipsa2E,
+    KoboLibraColour,
+    KoboClaraBW,
+    KoboClaraColour
 };
 
 struct TouchscreenSettings
@@ -58,15 +65,15 @@ struct FrontlightSettings
 
 struct KoboDeviceDescriptor
 {
-    KoboDevice device;
+    KoboDevice device = KoboUnknown;
     QString modelName;
-    int modelNumber;
+    int modelNumber = 0;
     int mark = 6;
-    int dpi;
-    int width;
-    int height;
-    qreal physicalWidth;
-    qreal physicalHeight;
+    int dpi = 0;
+    int width = 0;
+    int height = 0;
+    qreal physicalWidth = 0;
+    qreal physicalHeight = 0;
 
     bool hasKeys = false;
     bool canToggleChargingLED = false;
@@ -74,27 +81,35 @@ struct KoboDeviceDescriptor
     // New devices *may* be REAGL-aware, but generally don't expect explicit REAGL requests, default to not.
     bool isREAGL = false;
 
-    // unused for now
     bool hasGSensor = false;
 
+    // Filled in from FBInk's device database at runtime
     TouchscreenSettings touchscreenSettings;
     FrontlightSettings frontlightSettings;
 
-    // MXCFB_WAIT_FOR_UPDATE_COMPLETE ioctls are generally reliable
+    // MXCFB_WAIT_FOR_UPDATE_COMPLETE ioctls are generally reliable (filled in from FBInk)
     bool hasReliableMxcWaitFor = true;
     // Sunxi devices require a completely different fb backend...
     bool isSunxi = false;
 
     // Standard sysfs path to the battery directory
     QString batterySysfs = "/sys/class/power_supply/mc13892_bat";
-    // Stable path to the NTX input device
+    // Fallback paths, the input devices are normally found by probing their capabilities
     QString ntxDev = "/dev/input/event0";
-    // Stable path to the Touch input device
     QString touchDev = "/dev/input/event1";
-    // Stable path to the Power Button input device
     QString powerDev = "null";
+
+    // Appended in the Qt 6 port
+    // MediaTek SoC (Clara 2E, Elipsa 2E, Libra Colour, Clara BW/Colour)
+    bool isMTK = false;
+    // Kaleido color panel
+    bool hasColorPanel = false;
+    bool hasStylus = false;
+    // As reported by FBInk, e.g. "Daylight"
+    QString codeName;
+    QString platform;
 };
 
-KoboDeviceDescriptor determineDevice();
+KoboDeviceDescriptor determineDevice(bool debug = false);
 
 #endif  // KOBODEVICEDESCRIPTOR_H

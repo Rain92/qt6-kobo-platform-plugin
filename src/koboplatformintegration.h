@@ -6,15 +6,13 @@
 
 #include <QtCore/QRegularExpression>
 
-#include "kobobuttonintegration.h"
 #include "kobofbscreen.h"
 #include "koboplatformadditions.h"
 #include "koboplatformfunctions.h"
 #include "kobowifimanager.h"
 
 class QAbstractEventDispatcher;
-class QFbVtHandler;
-class QEvdevKeyboardManager;
+class KoboInputManager;
 
 class KoboPlatformIntegration : public QPlatformIntegration, public QPlatformNativeInterface
 {
@@ -38,7 +36,6 @@ public:
     QFunctionPointer platformFunction(const QByteArray &function) const override;
 
     QList<QPlatformScreen *> screens() const;
-
 
     KoboDeviceDescriptor *deviceDescriptor();
 
@@ -66,8 +63,7 @@ private:
     QScopedPointer<QPlatformFontDatabase> m_fontDb;
     QScopedPointer<QPlatformServices> m_services;
 
-    QEvdevKeyboardManager *m_kbdMgr;
-    KoboButtonIntegration *koboKeyboard;
+    KoboInputManager *m_inputManager;
     KoboPlatformAdditions *koboAdditions;
     bool debug;
 };

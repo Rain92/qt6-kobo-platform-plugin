@@ -96,7 +96,7 @@ pkill -0 wpa_supplicant ||
         wpa_supplicant -D wext -s -i "${INTERFACE}" -c /etc/wpa_supplicant/wpa_supplicant.conf -O /var/run/wpa_supplicant -B
 
 
-// release ip
+# release ip
 
 
 # Release IP and shutdown udhcpc.
@@ -134,7 +134,7 @@ else
 fi
 
 
-// optain ip
+# obtain ip
 
 # NOTE: Prefer dhcpcd over udhcpc if available. That's what Nickel uses,
 #       and udhcpc appears to trip some insanely wonky corner cases on current FW (#6421)

@@ -6,7 +6,7 @@
 class KoboPlatformIntegrationPlugin : public QPlatformIntegrationPlugin
 {
     Q_OBJECT
-    Q_PLUGIN_METADATA(IID QPlatformIntegrationFactoryInterface_iid FILE "koboplatformplugin.json")
+    Q_PLUGIN_METADATA(IID QPlatformIntegrationFactoryInterface_iid FILE "../koboplatformplugin.json")
 
 public:
     QPlatformIntegration* create(const QString&, const QStringList&) override;
@@ -18,7 +18,7 @@ QPlatformIntegration* KoboPlatformIntegrationPlugin::create(const QString& syste
     if (!system.compare("kobo", Qt::CaseInsensitive))
         return new KoboPlatformIntegration(paramList);
 
-    return 0;
+    return nullptr;
 }
 
 #include "main.moc"

@@ -124,7 +124,8 @@ void KoboPlatformAdditions::setNaturalBrightness(int brig, int temp)
 
     if (device.frontlightSettings.hasNaturalLightMixer)
     {
-        if (fWhite != "")
+        // Like KOReader: brightness through /dev/ntx_io when available, the sysfs knob otherwise
+        if (!ntx_io_write(241, brig) && fWhite != "")
             write_light_value(fWhite, brig);
         if (fMixer != "")
             write_light_value(fMixer, temp);

@@ -1,10 +1,7 @@
 TARGET = kobo
 
-QTDIR = /mnt/onboard/.adds/qt-linux-5.15-kde-kobo
-CROSS_TC = arm-kobo-linux-gnueabihf
-
 TEMPLATE = lib
-CONFIG += plugin
+CONFIG += plugin c++17
 
 DEFINES += QT_NO_FOREACH
 
@@ -12,10 +9,7 @@ QMAKE_CXXFLAGS += -Wno-missing-field-initializers
 
 QMAKE_RPATHDIR += ../../lib
 
-QT += widgets \
-      core-private gui-private \
-      input_support-private \
-      fb_support-private
+QT += core-private gui-private fb_support-private
 
 lessThan(QT_MAJOR_VERSION, 6) {
     QT += eventdispatcher_support-private \
@@ -25,67 +19,61 @@ lessThan(QT_MAJOR_VERSION, 6) {
 
 INCLUDEPATH += $$PWD/src
 
-# FBINK
+# FBInk
+# Built as a static PIC archive by its own Makefile. The final Release/libfbink.a (or Debug/) already
+# contains libi2c, and INPUT=1 adds fbink_input_scan, which we use to find the input devices.
+FBINK_DIR = $$PWD/FBInk
 DEFINES += FBINK_FOR_KOBO
-FBInkBuildEvent.input = $$PWD/FBink/*.c $$PWD/FBink/*.h
-PHONY_DEPS = .
-FBInkBuildEvent.input = PHONY_DEPS
-FBInkBuildEvent.output = FBInk
-FBInkBuildEvent.clean_commands = make -C $$PWD/FBInk distclean
-
-FBInkBuildEvent.name = building FBInk
-FBInkBuildEvent.CONFIG += no_link target_predeps
-QMAKE_EXTRA_COMPILERS += FBInkBuildEvent
-
-INCLUDEPATH += $$PWD/FBInk $$PWD/FBInk/libi2c-staged/include $$PWD/FBInk/libevdev-staged/include/libevdev-1.0
-LIBS += -L$$PWD/FBInk/libi2c-staged/lib/ -l:libi2c.a
+INCLUDEPATH += $$FBINK_DIR
 
 CONFIG(debug, debug|release) {
-    FBInkBuildEvent.commands = CROSS_TC=$$CROSS_TC MINIMAL=1 DRAW=1 DEBUG=1 KOBO=true make -C $$PWD/FBInk pic
-    LIBS += -L$$PWD/FBInk/Debug -l:libfbink.a
+    FBINK_OUT_DIR = Debug
+    FBINK_MAKE_FLAGS = DEBUG=1
+} else {
+    FBINK_OUT_DIR = Release
 }
+FBINK_LIB = $$FBINK_DIR/$$FBINK_OUT_DIR/libfbink.a
 
-CONFIG(release, debug|release) {
-FBInkBuildEvent.commands = CROSS_TC=$$CROSS_TC MINIMAL=1 DRAW=1 KOBO=true make -C $$PWD/FBInk pic
-    LIBS += -L$$PWD/FBInk/Release -l:libfbink.a
-}
+# Use the same cross compiler as the Qt kit, e.g. /path/to/arm-kobo-linux-gnueabihf-gcc -> /path/to/arm-kobo-linux-gnueabihf-
+FBINK_CROSS_COMPILE = $$replace(QMAKE_CC, gcc$, )
 
+fbink.target = $$FBINK_LIB
+fbink.commands = $(MAKE) -C $$FBINK_DIR CROSS_COMPILE=$$FBINK_CROSS_COMPILE MINIMAL=1 DRAW=1 INPUT=1 KOBO=true $$FBINK_MAKE_FLAGS pic
+# FBInk's own Makefile is incremental, so always give it a chance to rebuild
+fbink.depends = FORCE
+fbinkclean.commands = $(MAKE) -C $$FBINK_DIR $$FBINK_MAKE_FLAGS distclean
+clean.depends += fbinkclean
+QMAKE_EXTRA_TARGETS += fbink fbinkclean clean
+PRE_TARGETDEPS += $$FBINK_LIB
+LIBS += $$FBINK_LIB
 
 SOURCES = src/main.cpp \
           src/dither.cpp \
-          src/kobobuttonintegration.cpp \
+          src/koboinputmanager.cpp \
+          src/kobokeyhandler.cpp \
+          src/kobotouchhandler.cpp \
           src/kobodevicedescriptor.cpp \
           src/kobofbscreen.cpp \
           src/koboplatformadditions.cpp \
           src/koboplatformintegration.cpp \
-          src/kobowifimanager.cpp \
-          src/qevdevtouchdata.cpp \
-          src/qevdevtouchdata2.cpp \
-          src/qevdevtouchhandlerthread.cpp \
-          src/qevdevtouchmanager.cpp \
-          src/qevdevtouchhandler.cpp
+          src/kobowifimanager.cpp
 
 HEADERS = \
           src/dither.h \
           src/einkenums.h \
-          src/kobobuttonintegration.h \
+          src/koboinputmanager.h \
+          src/kobokeyhandler.h \
+          src/kobotouchhandler.h \
           src/kobodevicedescriptor.h \
           src/kobofbscreen.h \
           src/koboplatformadditions.h \
           src/koboplatformfunctions.h \
           src/koboplatformintegration.h \
-          src/kobowifimanager.h \
-          src/qevdevtouchdata.h \
-          src/qevdevtouchdata2.h \
-          src/qevdevtouchfilter_p.h \
-          src/qevdevtouchhandler.h \
-          src/qevdevtouchhandlerthread.h \
-          src/qevdevtouchmanager_p.h
+          src/kobowifimanager.h
 
-
-OTHER_FILES += \
-
-target.path =$$QTDIR/plugins/platforms
+QTDIR = /mnt/onboard/.adds/qt-linux-5.15-kde-kobo
+greaterThan(QT_MAJOR_VERSION, 5): QTDIR = /mnt/onboard/.adds/qt-$${QT_VERSION}-kobo
+target.path = $$QTDIR/plugins/platforms
 INSTALLS += target
 
 DISTFILES += \
@@ -93,4 +81,3 @@ DISTFILES += \
 
 RESOURCES += \
     Resources.qrc
-

@@ -54,7 +54,11 @@ bool KoboWifiManager::testInternetConnection(int timeout)
 void KoboWifiManager::enableWiFiConnection()
 {
     QFile restoreWifiFile(":/scripts/restore-wifi.sh");
-    restoreWifiFile.open(QIODevice::ReadOnly);
+    if (!restoreWifiFile.open(QIODevice::ReadOnly))
+    {
+        qWarning() << "Failed to load" << restoreWifiFile.fileName();
+        return;
+    }
     QByteArray restoreWifiScript = restoreWifiFile.readAll();
     restoreWifiFile.close();
 
@@ -64,7 +68,11 @@ void KoboWifiManager::enableWiFiConnection()
 void KoboWifiManager::disableWiFiConnection()
 {
     QFile disableWifiFile(":/scripts/disable-wifi.sh");
-    disableWifiFile.open(QIODevice::ReadOnly);
+    if (!disableWifiFile.open(QIODevice::ReadOnly))
+    {
+        qWarning() << "Failed to load" << disableWifiFile.fileName();
+        return;
+    }
     QByteArray disableWifiScript = disableWifiFile.readAll();
     disableWifiFile.close();
 
